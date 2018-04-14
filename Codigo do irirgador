@@ -1,0 +1,258 @@
+
+/*
+  ####################################################################################
+  #  	File:              Sistema_Irrigamento_Arduinko.ino                          #
+  #   Processor:          Arduino UNO, MEGA ou Teensy++ 2.0                          #
+  #  	Language:	    Wiring / C /Processing /Fritzing / Arduino IDE           #
+  #                                                                                  #
+  #	Objectives:           Sistema de analise e irrigação de solo                 #
+  #                                                                                  #
+  # Behavior:	  Quando o solo está seco, em uma hora especifica e se tiver         #
+  #                        agua no tanque, o sistema iniciara uma bomba.             #
+  #                                                                                  #
+  #                                                                                  # 
+  #   Author:                 Darlei Napoleão                                        #
+  #   Date:                   14/04/2018                                             #
+  #   place:                  João Pessoa, Brasil                                    #
+  #                                                                                  #
+  #####################################################################################
+
+                       Este projeto contém código de domínio público.
+                         A modificação é permitida sem aviso prévio.
+
+
+// Definição de bibliotecas
+#include <Wire.h>
+#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
+#include "RTClib.h"
+
+
+
+// frequencia das notas musicais
+#define NOTE_C6  1047
+#define NOTE_C3  131
+#define NOTE_G3  196
+
+// Definição dos pinos
+int levelSensorPin = 0;
+int moistureSensorPin = 1;
+int audioPin = 2;
+int soggyLEDPin = 3;
+int moistsoilLEDPin = 4;
+int drysoilLEDPin = 5;
+int pumpLEDPin = 6;
+int pumpPin = 7;
+
+// Variaveis
+int levelSensorValue;       // armazena os valores do sensor de nível
+int moistureSensorValue;    // armazena os valores do sensor de umidade
+int j = 0;
+
+// Mensagens do Sistema
+const char *string_table[] =
+{
+  "    Bem-vindo a Wyden ,
+  "   Tanque Quase Vazio",
+  "      Solo Seco",
+  "     Solo Umido",
+  "     Solo Encharcado",
+  "Bomba Ligada",
+  "   FBV| Wyden ",
+  "  Automação Wyden",
+  "  Sistema de Irrigação",
+  "    Espere, por favor!"
+};
+
+// Definição de objetos 
+RTC_DS1307 RTC;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+
+void setup() {
+  // Inicialização serial
+  Serial.begin(9600);
+
+  //  Inicialização LCD
+  lcd.init();
+  lcd.backlight();     // Luz de fundo
+  lcd.clear();         // Limpa tela
+
+  // Inicialização Wire 
+  Wire.begin();
+
+  // Inicialização RTC 
+  RTC.begin();
+  if (!RTC.isrunning()) {
+    // Data e hora ajustada de acordo com o proprio computador
+    RTC.adjust(DateTime(__DATE__, __TIME__));
+  }
+
+  //  Pinos de Inicialização do Arduino
+  pinMode(audioPin, OUTPUT);
+  pinMode(soggyLEDPin, OUTPUT);
+  pinMode(moistsoilLEDPin, OUTPUT);
+  pinMode(drysoilLEDPin, OUTPUT);
+  pinMode(pumpLEDPin, OUTPUT);
+  pinMode(pumpPin, OUTPUT);
+
+  // Mensagem inicial LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(string_table[6]);
+  lcd.setCursor(0, 1);
+  lcd.print(string_table[7]);
+  lcd.setCursor(0, 3);
+  lcd.print(string_table[0]);
+  // Inicialização da espera
+  delay(5000);
+}
+
+
+void loop() {
+
+
+  // definicção de parametros RTC
+  DateTime myRTC = RTC.now();
+  int H = myRTC.hour();
+  int M = myRTC.minute();
+  int S = myRTC.second();
+
+  // Chama a função relogio
+  //RightHour();
+
+  // Lendo os sensores
+  levelSensorValue = analogRead(levelSensorPin);
+  moistureSensorValue = analogRead(moistureSensorPin);
+
+  // Se baixo nível de água: reproduz o alarme de nível baixo
+  if (levelSensorValue > 600) {
+    // Mensagem do Sistema
+    lcd.clear();
+    RightHour();
+    lcd.setCursor(0, 3);
+    lcd.print(string_table[1]);
+    // toca o som do alarme
+    for (int i = 0; i < 2; i++) {
+      tone(audioPin, NOTE_G3, 200);
+      delay(200);
+      tone(audioPin, NOTE_C3, 200);
+      delay(200);
+      noTone(audioPin);
+    }
+  }
+
+  // verificando a faixa de umidade
+  if (moistureSensorValue >= 700) {
+    //Em caso de solo seco:
+    // Mensagens do sistema
+    lcd.clear();
+    RightHour();
+    lcd.setCursor(0, 3);
+    lcd.print(string_table[2]);
+    // acende o LED correto
+    digitalWrite(drysoilLEDPin, HIGH);
+    digitalWrite(moistsoilLEDPin, LOW);
+    digitalWrite(soggyLEDPin, LOW);
+    // toca o som do alarme
+    tone(audioPin, NOTE_C6, 100);
+    delay(250);
+    noTone(audioPin);
+  }
+  if ((moistureSensorValue < 700) && (moistureSensorValue >= 300)) {
+    // em caso de solo úmido:
+    // Mensagens do sistema
+    lcd.clear();
+    RightHour();
+    lcd.setCursor(0, 3);
+    lcd.print(string_table[3]);
+    // acende o LED correto
+    digitalWrite(drysoilLEDPin, LOW);
+    digitalWrite(moistsoilLEDPin, HIGH);
+    digitalWrite(soggyLEDPin, LOW);
+    delay(250);
+  }
+  if (moistureSensorValue < 300) {
+    // em caso de solo encharcado:
+    // Mensagens do sistema
+    lcd.clear();
+    RightHour();
+    lcd.setCursor(0, 3);
+    lcd.print(string_table[4]);
+    // acende o LED correto
+    digitalWrite(drysoilLEDPin, LOW);
+    digitalWrite(moistsoilLEDPin, LOW);
+    digitalWrite(soggyLEDPin, HIGH);
+    delay(100);
+  }
+
+  // Se o solo estiver seco e se for o momento certo: ligue a bomba por 1 minuto
+  if ((H == 16) && (M == 50) && (S == 00)) {
+    while (moistureSensorValue >= 700) {
+      // Mensagens do sistema
+      lcd.clear();
+      RightHour();
+      lcd.setCursor(0, 1);
+      lcd.print(string_table[8]);
+      lcd.setCursor(0, 3);
+      lcd.print(string_table[5]);
+      // liga a bomba
+      digitalWrite(pumpPin, HIGH);
+      digitalWrite(pumpLEDPin, HIGH);
+      delay(10000);
+      // se o solo não está úmido
+      // lê o sensor de umidade mais uma vez
+      moistureSensorValue = analogRead(moistureSensorPin);
+    }
+    // turn the pump off
+    digitalWrite(pumpPin, LOW);
+    digitalWrite(pumpLEDPin, LOW);
+  }
+
+}
+
+// Funçao de tempo real
+void RightHour()
+{
+  DateTime Now = RTC.now();
+  String clock_date = "  Data: ";
+  String clock_hour = "   Tempo: ";
+
+  int _day = Now.day();
+  int _month = Now.month();
+  int _year = Now.year();
+
+  clock_date += fixZero(_day);
+  clock_date += "/";
+  clock_date += fixZero(_month);
+  clock_date += "/";
+  clock_date += _year;
+
+  int _hour = Now.hour();
+  int _minute = Now.minute();
+  int _second = Now.second();
+
+  clock_hour += fixZero(_hour);
+  clock_hour += ":";
+  clock_hour += fixZero(_minute);
+  clock_hour += ":";
+  clock_hour += fixZero(_second);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(clock_date);
+  lcd.setCursor(0, 1);
+  lcd.print(clock_hour);
+
+  delay(500);
+}
+
+
+String fixZero(int i)
+{
+  String ret;
+  if (i < 10) ret += "0";
+  ret += i;
+  return ret;
+}
+
