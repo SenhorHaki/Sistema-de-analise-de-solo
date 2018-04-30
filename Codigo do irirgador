@@ -20,7 +20,7 @@
                        Este projeto contém código de domínio público.
                          A modificação é permitida sem aviso prévio.
 
-
+*/
 // Definição de bibliotecas
 #include <Wire.h>
 #include <LiquidCrystal.h>
