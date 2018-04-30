@@ -52,7 +52,7 @@ int j = 0;
 // Mensagens do Sistema
 const char *string_table[] =
 {
-  "    Bem-vindo a Wyden ,
+  "    Bem-vindo a Wyden ",
   "   Tanque Quase Vazio",
   "      Solo Seco",
   "     Solo Umido",
